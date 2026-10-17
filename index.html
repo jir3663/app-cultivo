@@ -190,6 +190,20 @@
     .mini-btn { flex: 1; border: 1px solid var(--border); background: white; border-radius: 6px; padding: 6px 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer; color: var(--primary); font-family: inherit; }
     .mini-btn.water { background: #0284C7; color: white; border-color: #0284C7; }
     .mini-btn:hover { filter: brightness(0.95); }
+    .mini-btn.health { padding: 6px 2px; font-size: 0.9rem; }
+    .mini-btn.health.on.enf, .health-btn.on.enf { background: #FEE2E2; border-color: #B91C1C; color: #7F1D1D; }
+    .mini-btn.health.on.bug, .health-btn.on.bug { background: #FFEDD5; border-color: #EA580C; color: #7C2D12; }
+    .mini-btn.health.on.med, .health-btn.on.med { background: #F3E8FF; border-color: #7E22CE; color: #581C87; }
+    .mini-btn.health.on.prev, .health-btn.on.prev { background: #DCFCE7; border-color: #15803D; color: #14532D; }
+    .h-badge { font-size: 0.65rem; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .h-badge.enf { background: #B91C1C; }
+    .h-badge.bug { background: #EA580C; }
+    .h-badge.med { background: #7E22CE; }
+    .h-badge.prev { background: #15803D; }
+    .health-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .health-btn { border: 1px solid var(--border); background: #FAFAFA; border-radius: 8px; padding: 10px 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; color: var(--text); font-family: inherit; }
+    .health-btn:hover { filter: brightness(0.96); }
+    .gv-cell em { overflow-wrap: anywhere; }
 
     .calc-card, .stats-card { background: white; padding: 24px; border-radius: var(--radius); box-shadow: var(--shadow); max-width: 650px; margin: 0 auto 20px auto; border: 1px solid var(--border); }
     .calc-result-box { background: #F8FBF8; border: 1px solid var(--border); padding: 16px; border-radius: 10px; margin-top: 20px; font-size: 0.95rem; border-left: 4px solid var(--accent); }
@@ -271,8 +285,8 @@
 </head>
 <body>
 <header>
-    <h1>🌿 Mi Cultivo Indoor Pro</h1>
-    <p class="subtitle">Gestor con catálogo mundial de genéticas • Advanced Nutrients</p>
+    <h1>🌿 Cultivo Pro</h1>
+    <p class="subtitle">Gestor de cultivo</p>
     <button id="installBtn" class="install-btn" style="display:none" onclick="installApp()">📲 Instalar app</button>
 </header>
 
@@ -287,7 +301,7 @@
 
     <div class="top-dashboard">
         <div class="control-group">
-            <label for="strainSearchInput">🔍 Genética (100+ variedades):</label>
+            <label for="strainSearchInput">🔍 Genética:</label>
             <input type="text" id="strainSearchInput" placeholder="Haz clic o escribe para buscar..." autocomplete="off" onfocus="showStrainDropdown()" oninput="filterStrains()" onclick="showStrainDropdown()">
             <div id="strainDropdownList" class="search-dropdown-list"></div>
         </div>
@@ -436,6 +450,11 @@
         <div class="modal-section">
             <label class="lbl">Estado de riego:</label>
             <button class="btn btn-water" id="waterDoneBtn" onclick="toggleWaterDone()">💧 Marcar riego como realizado</button>
+        </div>
+        <div class="modal-section">
+            <label class="lbl">Salud del cultivo:</label>
+            <div class="health-grid" id="healthBtns"></div>
+            <div class="muted" style="margin-top:6px">Apunta el producto, la plaga o la dosis en tus anotaciones.</div>
         </div>
         <div class="modal-section">
             <label class="lbl" for="modalNoteInput">Tus anotaciones:</label>
@@ -896,6 +915,24 @@ function dayData(d, raw) {
 
 /* ============ RENDER CALENDARIO ============ */
 function phLine(x) { return x.water ? '🧫 pH ideal del agua: <b>' + x.phr.range + '</b> (objetivo ' + x.phr.target + ')' : ''; }
+/* Salud del cultivo: marcas por día (enfermedad, bichos, medicamento, prevención). Se guardan en S.days[d].h */
+const HEALTH = [
+    { k: 'enf', ico: '🦠', lbl: 'Enfermedad' },
+    { k: 'bug', ico: '🐛', lbl: 'Bichos' },
+    { k: 'med', ico: '💊', lbl: 'Medicamento' },
+    { k: 'prev', ico: '🛡️', lbl: 'Prevención' }
+];
+function healthOn(r, k) { return !!(r && r.h && r.h[k]); }
+function healthBtnsHTML(r) {
+    return '<div class="card-actions">' + HEALTH.map(h => '<button class="mini-btn health ' + h.k + (healthOn(r, h.k) ? ' on' : '') +
+        '" data-act="h:' + h.k + '" title="' + h.lbl + '" aria-label="' + h.lbl + '" aria-pressed="' + healthOn(r, h.k) + '">' + h.ico + '</button>').join('') + '</div>';
+}
+function toggleHealth(d, k) {
+    const r = rec(d); r.h = r.h || {};
+    if (r.h[k]) delete r.h[k]; else r.h[k] = 1;
+    if (!Object.keys(r.h).length) delete r.h;
+    save(); renderAll();
+}
 function cardHTML(x, custom) {
     const r = x.rec, done = !!r.done, cls = ['day-card'];
     if (x.water) cls.push('water-day');
@@ -906,11 +943,12 @@ function cardHTML(x, custom) {
     if (r.note) badges += '<span class="note-badge">📝 Nota</span>';
     if (nPh) badges += '<span class="photo-badge">📷 ' + nPh + '</span>';
     if (r.c && Object.keys(r.c).length) badges += '<span class="edit-badge">✏️ Editado</span>';
+    HEALTH.forEach(h => { if (healthOn(r, h.k)) badges += '<span class="h-badge ' + h.k + '">' + h.ico + ' ' + h.lbl + '</span>'; });
     let actions = '';
     if (custom) {
         actions = '<div class="card-actions">' +
             (x.water ? '<button class="mini-btn water" data-act="water">' + (done ? '↩ Deshacer' : '💧 Regado') + '</button>' : '') +
-            '<button class="mini-btn" data-act="edit">✏️ Editar</button></div>';
+            '<button class="mini-btn" data-act="edit">✏️ Editar</button></div>' + healthBtnsHTML(r);
     }
     return '<div class="' + cls.join(' ') + '" data-day="' + x.d + '"><div>' +
         '<div class="day-header"><span>Día ' + (x.d + 1) + '</span><span>' + (x.water ? (done ? '✅' : '💧') : '') + '</span></div>' +
@@ -958,14 +996,14 @@ function gridHTML(custom) {
             let ico = '';
             if (x.water) ico = done ? '✅' : (x.wtype === 'nutri' ? '💧' : '🚿');
             const dd = String(x.date.getDate()).padStart(2, '0') + '/' + String(x.date.getMonth() + 1).padStart(2, '0');
-            const marks = (r.note ? '📝' : '') + ((r.photos || []).length ? '📷' : '') + (r.c && Object.keys(r.c).length ? '✏️' : '');
+            const marks = (r.note ? '📝' : '') + ((r.photos || []).length ? '📷' : '') + (r.c && Object.keys(r.c).length ? '✏️' : '') + HEALTH.map(h => healthOn(r, h.k) ? h.ico : '').join('');
             cells += '<div class="' + cls.join(' ') + '" data-day="' + x.d + '"><b>' + (x.d + 1) + '</b>' +
                 '<span class="gv-ico"' + (custom && x.water ? ' data-act="water"' : '') + '>' + ico + '</span>' +
                 '<small>' + dd + '</small><em>' + marks + '</em></div>';
         }
         rows += '<div class="gv-row"><div class="gv-wk" data-wk="' + w + '"><b>S' + (w + 1) + '</b><small>' + ph.icon + ' ' + ph.label + '</small></div>' + cells + '</div>';
     }
-    return '<div class="gv-wrap"><div class="gv-legend">💧 riego con nutrientes · 🚿 agua sola · ✅ hecho · borde azul = hoy · ' +
+    return '<div class="gv-wrap"><div class="gv-legend">💧 riego con nutrientes · 🚿 agua sola · ✅ hecho · 🦠 enfermedad · 🐛 bichos · 💊 medicamento · 🛡️ prevención · borde azul = hoy · ' +
         nW + ' riegos en total (' + nN + ' con nutrientes)</div>' + rows +
         '<p class="muted" style="margin:10px 0 0">' + (custom ? 'Toca un día para editarlo o el icono para marcar el riego.' : 'Toca un día para ver el detalle, anotar o subir fotos.') + ' Toca «S1», «S2»… para ir a esa semana.</p></div>';
 }
@@ -985,7 +1023,7 @@ function bindWeeks(custom) {
         if (wk) { activeWeek[k] = +wk.dataset.wk; S.ui[k] = 'week'; save(); renderWeeks(custom); return; }
         const card = e.target.closest('.day-card,.gv-cell'); if (!card) return;
         const d = +card.dataset.day, btn = e.target.closest('[data-act]');
-        if (btn) { if (btn.dataset.act === 'water') quickWater(d); else openCustom(d); return; }
+        if (btn) { const a = btn.dataset.act; if (a === 'water') quickWater(d); else if (a.indexOf('h:') === 0) toggleHealth(d, a.slice(2)); else openCustom(d); return; }
         if (custom) openCustom(d); else openDay(d);
     });
 }
@@ -1068,7 +1106,7 @@ function openDay(d) {
     $('modalTask').innerHTML = '📝 <strong>Tarea clave:</strong> ' + esc(x.task || '—');
     $('modalNoteInput').value = x.rec.note || '';
     tmpPhotos = (x.rec.photos || []).slice();
-    renderPhotos(); updWaterBtn();
+    renderPhotos(); updWaterBtn(); renderHealthBtns();
     $('dayModal').style.display = 'flex';
 }
 function updWaterBtn() {
@@ -1077,6 +1115,12 @@ function updWaterBtn() {
     b.classList.toggle('done', done);
 }
 function toggleWaterDone() { const r = rec(curDay); r.done = !r.done; save(); updWaterBtn(); renderAll(); }
+function renderHealthBtns() {
+    const r = S.days[curDay] || {};
+    $('healthBtns').innerHTML = HEALTH.map(h => '<button type="button" class="health-btn ' + h.k + (healthOn(r, h.k) ? ' on' : '') +
+        '" onclick="toggleHealthModal(\'' + h.k + '\')" aria-pressed="' + healthOn(r, h.k) + '">' + h.ico + ' ' + h.lbl + '</button>').join('');
+}
+function toggleHealthModal(k) { toggleHealth(curDay, k); renderHealthBtns(); }
 function closeModal() { $('dayModal').style.display = 'none'; }
 function saveDayData() {
     const r = rec(curDay);
